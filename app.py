@@ -587,11 +587,7 @@ def claims_analysis_page():
                     st.plotly_chart(fig_payer_bar, use_container_width=True)
                 else:
                     st.warning("No data available for the selected denial reason.")
-            else:
-                st.info("Click on any segment of the pie chart above to see detailed denial information.")
-        else:
-            st.info("Click on any segment of the pie chart above to see detailed denial information.")
-
+        
 def payer_insights_page():
     # Page header
     st.markdown('<h1 class="page-header">Payer Insights</h1>', unsafe_allow_html=True)
