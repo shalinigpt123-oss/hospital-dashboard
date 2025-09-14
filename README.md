@@ -8,7 +8,7 @@ A Streamlit-based dashboard prototype for hospital revenue cycle management.
 - **Claims Resolution Timeline**: Interactive pie chart showing how quickly claims are resolved
 - **Payment Tracker**: Comprehensive table with claim details and payment information
 - **Filtering Options**: View data by Overall, Payer, or Department
-- **Key Metrics**: Average Days in A/R, Total Raised, Total Received, Collection Rate
+- **Key Metrics**: Avg. Number of days for Claim resolution, Total Raised, Total Received, Collection Rate
 
 ## Installation
 
