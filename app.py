@@ -324,7 +324,7 @@ def categorize_resolution_days(days):
 
 def financial_health_page():
     # Page header
-    st.markdown('<h1 class="page-header">Financial Health Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-header">Financial Health</h1>', unsafe_allow_html=True)
     
     # Load data
     df = generate_sample_data()
@@ -339,19 +339,24 @@ def financial_health_page():
     with col2:
         selected_department = st.selectbox("Filter by Department:", ["All"] + sorted(df['Department'].unique().tolist()))
     
+    # Apply filters first
+    filtered_df = df.copy()
+    if selected_payer != "All":
+        filtered_df = filtered_df[filtered_df['Payer'] == selected_payer]
+    if selected_department != "All":
+        filtered_df = filtered_df[filtered_df['Department'] == selected_department]
+    
+    # Create pie chart data first
+    filtered_df['Resolution Category'] = filtered_df['Resolution Days'].apply(categorize_resolution_days)
+    resolution_counts = filtered_df['Resolution Category'].value_counts()
+    
     with col4:
-        # Filter data first to calculate accurate Average Days in A/R
-        filtered_df = df.copy()
-        if selected_payer != "All":
-            filtered_df = filtered_df[filtered_df['Payer'] == selected_payer]
-        if selected_department != "All":
-            filtered_df = filtered_df[filtered_df['Department'] == selected_department]
-        
+        # Calculate average from the same data used in pie chart
         avg_days_ar = filtered_df['Resolution Days'].mean() if len(filtered_df) > 0 else 0
         st.markdown(f"""
         <div class="metric-container">
             <div class="metric-value">{avg_days_ar:.1f}</div>
-            <div class="metric-label">Average Days in A/R</div>
+            <div class="metric-label">Avg. Number of days for Claim resolution</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -362,10 +367,6 @@ def financial_health_page():
     
     with col_left:
         st.subheader("Claims Resolution Timeline")
-        
-        # Create pie chart data
-        filtered_df['Resolution Category'] = filtered_df['Resolution Days'].apply(categorize_resolution_days)
-        resolution_counts = filtered_df['Resolution Category'].value_counts()
         
         # Create pie chart
         fig_pie = px.pie(
@@ -390,9 +391,10 @@ def financial_health_page():
         # Display the payment tracker table
         display_df = filtered_df[['Claim ID', 'Payer', 'Department', 'Amount Raised', 'Amount Received']].copy()
         
-        # Format currency columns
+        # Format currency and percentage columns
         display_df['Amount Raised'] = display_df['Amount Raised'].apply(lambda x: f"${x:,.2f}")
-        display_df['Amount Received'] = display_df['Amount Received'].apply(lambda x: f"${x:,.2f}")
+        # Convert Amount Received to percentage of Amount Raised
+        display_df['Amount Received'] = (filtered_df['Amount Received'] / filtered_df['Amount Raised'] * 100).apply(lambda x: f"{x:.1f}%")
         
         # Display table with pagination
         st.dataframe(
@@ -452,15 +454,16 @@ def claims_analysis_page():
         st.markdown(f"""
         <div class="metric-container">
             <div class="metric-value">${total_claimed:,.0f}</div>
-            <div class="metric-label">Total Claimed Amount</div>
+            <div class="metric-label">Total Claimed Amount (Current Month)</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col5:
         total_outstanding = filtered_df['Outstanding Amount'].sum()
+        outstanding_percentage = (total_outstanding / total_claimed) * 100 if total_claimed > 0 else 0
         st.markdown(f"""
         <div class="metric-container">
-            <div class="metric-value">${total_outstanding:,.0f}</div>
+            <div class="metric-value">{outstanding_percentage:.1f}%</div>
             <div class="metric-label">Outstanding Claim Amount</div>
         </div>
         """, unsafe_allow_html=True)
@@ -503,7 +506,7 @@ def claims_analysis_page():
         st.plotly_chart(fig_bar, use_container_width=True)
     
     with col_right:
-        st.subheader("Denial RCA (Root Cause Analysis)")
+        st.subheader("Denial RCA (Root Cause Analysis) - Current Month")
         
         # Create pie chart for denial reasons
         denial_counts = filtered_denial_df['Denial Reason'].value_counts()
@@ -532,66 +535,66 @@ def claims_analysis_page():
             plot_bgcolor='rgba(0,0,0,0)'
         )
         
-        # Display the pie chart
+        # Display the pie chart with click functionality
         selected_points = st.plotly_chart(fig_pie, use_container_width=True, on_select="rerun", selection_mode="points")
-    
-    # Interactive table based on pie chart selection
-    st.subheader("Detailed Denial Analysis")
-    
-    # Check if any pie chart segment was clicked
-    if selected_points and 'selection' in selected_points and 'points' in selected_points['selection']:
-        if selected_points['selection']['points']:
-            # Get the selected denial reason
-            selected_point = selected_points['selection']['points'][0]
-            selected_reason = selected_point['label']
-            
-            st.info(f"Showing details for: **{selected_reason}**")
-            
-            # Filter denial data by selected reason
-            detailed_df = filtered_denial_df[filtered_denial_df['Denial Reason'] == selected_reason]
-            
-            # Display the detailed table
-            display_cols = ['Claim ID', 'Payer', 'Rejection Code', 'Department']
-            st.dataframe(
-                detailed_df[display_cols],
-                use_container_width=True,
-                height=300,
-                hide_index=True
-            )
-            
-            # Show summary for selected reason
-            col_summary1, col_summary2, col_summary3 = st.columns(3)
-            with col_summary1:
-                st.metric("Total Claims", len(detailed_df))
-            with col_summary2:
-                top_payer = detailed_df['Payer'].mode().iloc[0] if len(detailed_df) > 0 else "N/A"
-                st.metric("Top Affected Payer", top_payer)
-            with col_summary3:
-                top_dept = detailed_df['Department'].mode().iloc[0] if len(detailed_df) > 0 else "N/A"
-                st.metric("Top Affected Department", top_dept)
+        
+        # Check if any pie chart segment was clicked and show bar chart
+        if selected_points and 'selection' in selected_points and 'points' in selected_points['selection']:
+            if selected_points['selection']['points']:
+                # Get the selected denial reason
+                selected_point = selected_points['selection']['points'][0]
+                selected_reason = selected_point['label']
+                
+                st.info(f"Showing payer breakdown for: **{selected_reason}**")
+                
+                # Filter denial data by selected reason
+                detailed_df = filtered_denial_df[filtered_denial_df['Denial Reason'] == selected_reason]
+                
+                # Create payer breakdown for the selected denial reason
+                if len(detailed_df) > 0:
+                    # Group by payer and count occurrences
+                    payer_breakdown = detailed_df.groupby('Payer').size().reset_index(name='Count')
+                    payer_breakdown = payer_breakdown.sort_values('Count', ascending=False)
+                    
+                    # Create bar chart showing payer breakdown
+                    fig_payer_bar = px.bar(
+                        payer_breakdown,
+                        x='Payer',
+                        y='Count',
+                        color='Count',
+                        color_continuous_scale=['#FF6B6B', '#FFE66D', '#4ECDC4'],
+                        text='Count',
+                        title=f"Payer Breakdown for '{selected_reason}'"
+                    )
+                    
+                    fig_payer_bar.update_layout(
+                        title_font_size=16,
+                        xaxis_title="Payer",
+                        yaxis_title="Number of Denied Claims",
+                        showlegend=False,
+                        height=400,
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        xaxis_tickangle=45
+                    )
+                    
+                    fig_payer_bar.update_traces(
+                        texttemplate='%{text}',
+                        textposition='outside'
+                    )
+                    
+                    # Display the bar chart
+                    st.plotly_chart(fig_payer_bar, use_container_width=True)
+                else:
+                    st.warning("No data available for the selected denial reason.")
+            else:
+                st.info("Click on any segment of the pie chart above to see detailed denial information.")
         else:
             st.info("Click on any segment of the pie chart above to see detailed denial information.")
-    else:
-        st.info("Click on any segment of the pie chart above to see detailed denial information.")
-        
-        # Show overall denial summary table
-        st.write("**Overall Denial Summary:**")
-        summary_df = filtered_denial_df.groupby('Denial Reason').agg({
-            'Claim ID': 'count',
-            'Payer': lambda x: x.mode().iloc[0] if len(x) > 0 else 'N/A',
-            'Department': lambda x: x.mode().iloc[0] if len(x) > 0 else 'N/A'
-        }).rename(columns={'Claim ID': 'Total Claims', 'Payer': 'Top Payer', 'Department': 'Top Department'})
-        
-        st.dataframe(
-            summary_df.reset_index(),
-            use_container_width=True,
-            height=300,
-            hide_index=True
-        )
 
 def payer_insights_page():
     # Page header
-    st.markdown('<h1 class="page-header">Payer Insights Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-header">Payer Insights</h1>', unsafe_allow_html=True)
     
     # Load payer insights data
     payer_df = generate_payer_insights_data()
@@ -815,7 +818,7 @@ def payer_insights_page():
 
 def operational_efficiency_page():
     # Page header
-    st.markdown('<h1 class="page-header">Operational Efficiency Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-header">Operational Efficiency</h1>', unsafe_allow_html=True)
     
     # Load claims table data
     claims_df = generate_claims_table_data()
@@ -916,7 +919,7 @@ def operational_efficiency_page():
 # Main app
 def main():
     # Navigation
-    st.sidebar.title("Navigation")
+    st.sidebar.title("RapidClaims Central RCM Control Center")
     page = st.sidebar.selectbox("Select Page", ["Financial Health", "Denial Management", "Payer Insights", "Operational Efficiency"])
     
     if page == "Financial Health":
